@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>drag</title>
+  <style type="text/css">
+    #circle,
+    {
+      margin: 20px;
+      border-width: 0;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="circle">
+    <img id="myimg" src='./circle.svg' draggable="true" ondragstart="drag(event)">
+  </div>
+  <div id="show" class="clearfix">
+    <canvas id="myCanvas" ondrop="drop(event)" ondragover="allowDrop(event)" width="300" height="300" style="background-color:aquamarine "></canvas>
+</body>
+</div>
+
+<script>
+  // 保存画布上所有的黑点
+  var circles = [];
+  var timer;
+  var canvas = document.getElementById('myCanvas');
+  var ctx = canvas.getContext('2d');
+
+  //按下事件状态，标记按下后的移动，抬起参考
+  var groupstate = false;
+
+  //保存每根连线的起点和终点
+  var arr = [];
+
+  // 这个方法用来储存每个黑点对象
+  function Circle(x, y) {
+    this.x = x;
+    this.y = y;
+  }
+
+  function drop(ev) {
+    ev.preventDefault();
+    // 取得画布上被单击的点
+    let clickX = ev.clientX - canvas.offsetLeft;
+    let clickY = ev.clientY - canvas.offsetTop;
+    var myImage = new Image();
+    myImage.src = './circle.svg';
+    ctx.drawImage(myImage, clickX - 8, clickY - 8);
+    circle = new Circle(clickX, clickY)
+    circles.push(circle);
+  }
+
+  function drag(ev) {
+    var myimg = document.getElementById('myimg');
+    ev.dataTransfer.setData('Text', ev.target.id);
+    ev.dataTransfer.setDragImage(ev.target, 8, 8);
+    ev.dataTransfer.dropEffect = 'copy';
+  }
+
+  function allowDrop(ev) {
+    ev.preventDefault();
+  }
+
+  window.onload = function () {
+    canvas.onmousedown = mouseDownListener;
+    canvas.onmouseup = mouseUpListener;
+    canvas.onmouseout = stopDragging;
+    canvas.onmousemove = mouseMoveListener;
+  };
+
+  var startx, starty, endx, endy; //存储虚拟连线起始坐标
+
+  // 鼠标点击事件函数
+  function mouseDownListener(e) {
+    // 取得画布上被单击的点
+    let clickX = e.clientX - canvas.offsetLeft;
+    let clickY = e.clientY - canvas.offsetTop;
+    // 查找被单击的圆圈
+    for (var i = circles.length - 1; i >= 0; i--) {
+      var circle = circles[i];
+      console.log(circle.x, circle.y);
+      //使用勾股定理计算这个点与圆心之间的距离
+      var distanceFromCenter = Math.sqrt(Math.pow(circle.x - clickX, 2) + Math.pow(circle.y - clickY, 2));
+      console.log("点与圆心之间的距离" + distanceFromCenter);
+      // 判断这个点是否在圆圈中
+      if (distanceFromCenter <= 8) {
+        startx = circle.x;
+        starty = circle.y;
+        groupstate = true;
+        console.log(circle, groupstate);
+        return;
+      }
+    }
+  }
+
+  // 鼠标点击后的移动事件函数
+  function mouseMoveListener(e) {
+    if (groupstate) {
+      endx = e.pageX - canvas.offsetLeft;
+      endy = e.pageY - canvas.offsetTop;
+      timer = setInterval(drawLine(startx, starty, endx, endy), 1000 / 300);
+    }
+  }
+
+  // 画直线
+  function drawLine(sx, sy, ex, ey) {
+    ctx.clearRect(0, 0, 300, 300);
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(ex, ey);
+    ctx.closePath();
+    ctx.stroke();
+    // ctx.restore();
+    drawCircle();
+    redrawLine()
+  }
+
+  // 鼠标移出画布事件函数
+  function stopDragging(e) {
+    groupstate = false;
+    clearInterval(timer);
+    ctx.clearRect(0, 0, 300, 300);
+    ctx.save();
+    drawCircle();
+    redrawLine();
+  }
+
+  // 鼠标抬起事件函数
+  function mouseUpListener(e) {
+    clearInterval(timer);
+    groupstate = false;
+    for (var i = circles.length - 1; i >= 0; i--) {
+      var circle = circles[i];
+      //使用勾股定理计算这个点与圆心之间的距离
+      var distanceFromCenter = Math.sqrt(Math.pow(circle.x - endx, 2) +
+        Math.pow(circle.y - endy, 2))
+      // 判断这个点是否在圆圈中
+      if (distanceFromCenter <= 8) {
+        endx = circle.x;
+        endy = circle.y;
+        arr.push({
+          startx,
+          starty,
+          endx,
+          endy
+        });
+        drawLine(startx, starty, endx, endy);
+        ctx.clearRect(0, 0, 300, 300);
+        ctx.save();
+        drawCircle();
+        redrawLine();
+        return;
+      } else {
+        ctx.clearRect(0, 0, 300, 300);
+        ctx.save();
+        drawCircle();
+        redrawLine();
+      }
+    }
+  }
+
+  // 循环画出画布上的每个黑点
+  function drawCircle() {
+    for (var i = circles.length - 1; i >= 0; i--) {
+      var myImage = new Image();
+      myImage.src = './circle.svg';
+      ctx.drawImage(myImage, circles[i].x - 8, circles[i].y - 8);
+    }
+  }
+
+  // 循环画出画布上的每根连线
+  function redrawLine() {
+    for (var i = 0; i < arr.length; i++) {
+      ctx.beginPath();
+      ctx.moveTo(arr[i].startx, arr[i].starty);
+      ctx.lineTo(arr[i].endx, arr[i].endy);
+      ctx.stroke();
+    }
+  }
+</script>
+
+</html>
