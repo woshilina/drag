@@ -8,7 +8,7 @@
   <title>drag</title>
   <style type="text/css">
     #circle,
-    {
+      {
       margin: 20px;
       border-width: 0;
     }
@@ -20,22 +20,41 @@
     <img id="myimg" src='./circle.svg' draggable="true" ondragstart="drag(event)">
   </div>
   <div id="show" class="clearfix">
-    <canvas id="myCanvas" ondrop="drop(event)" ondragover="allowDrop(event)" width="300" height="300" style="background-color:aquamarine "></canvas>
+    <canvas id="myCanvas" ondrop="drop(event)" ondragover="allowDrop(event)" width="600px" height="600px" style="background-color:aquamarine "></canvas>
 </body>
 </div>
 
 <script>
   // 保存画布上所有的黑点
   var circles = [];
-  var timer;
+  //保存每根连线的起点和终点
+  var arr = [];
+  //保存拖拽圆点上的每根连线的起点和终点
+  var dragarr = [];
+  var dragIndex;
+  var timer; //连线时实时监听
+  var timer1; //拖拽时实时监听
+ 
+  var timerline;
+  var timercicle;
+  //图片的宽和高
+  var imgWidth;
+  var imgHeight;
   var canvas = document.getElementById('myCanvas');
+  // 获取画布的宽和高
+  var width = canvas.width;
+  var height = canvas.height;
+  var bRect = canvas.getBoundingClientRect();
   var ctx = canvas.getContext('2d');
 
   //按下事件状态，标记按下后的移动，抬起参考
   var groupstate = false;
+  var myimg = document.getElementById('myimg');
+  myimg.onload = function () {
+    imgWidth = myimg.width;
+    imgHeight = myimg.height;
+  }
 
-  //保存每根连线的起点和终点
-  var arr = [];
 
   // 这个方法用来储存每个黑点对象
   function Circle(x, y) {
@@ -46,19 +65,21 @@
   function drop(ev) {
     ev.preventDefault();
     // 取得画布上被单击的点
-    let clickX = ev.clientX - canvas.offsetLeft;
-    let clickY = ev.clientY - canvas.offsetTop;
+    let mouseX = ev.clientX - canvas.offsetLeft;
+    let mouseY = ev.clientY - canvas.offsetTop;
+
     var myImage = new Image();
     myImage.src = './circle.svg';
-    ctx.drawImage(myImage, clickX - 8, clickY - 8);
-    circle = new Circle(clickX, clickY)
+    ctx.drawImage(myImage, mouseX - imgWidth / 2, mouseY - imgHeight / 2);
+    circle = new Circle(mouseX, mouseY)
     circles.push(circle);
   }
 
   function drag(ev) {
     var myimg = document.getElementById('myimg');
     ev.dataTransfer.setData('Text', ev.target.id);
-    ev.dataTransfer.setDragImage(ev.target, 8, 8);
+    // 设置拖拽时鼠标在拖拽的目标中心
+    ev.dataTransfer.setDragImage(ev.target, imgWidth / 2, imgHeight / 2);
     ev.dataTransfer.dropEffect = 'copy';
   }
 
@@ -75,93 +96,173 @@
 
   var startx, starty, endx, endy; //存储虚拟连线起始坐标
 
-  // 鼠标点击事件函数
+  // 连线:鼠标点击事件函数
   function mouseDownListener(e) {
+    dragarr = [];
+    e.preventDefault();
     // 取得画布上被单击的点
     let clickX = e.clientX - canvas.offsetLeft;
     let clickY = e.clientY - canvas.offsetTop;
     // 查找被单击的圆圈
-    for (var i = circles.length - 1; i >= 0; i--) {
+    for (let i = circles.length - 1; i >= 0; i--) {
       var circle = circles[i];
-      console.log(circle.x, circle.y);
-      //使用勾股定理计算这个点与圆心之间的距离
-      var distanceFromCenter = Math.sqrt(Math.pow(circle.x - clickX, 2) + Math.pow(circle.y - clickY, 2));
-      console.log("点与圆心之间的距离" + distanceFromCenter);
-      // 判断这个点是否在圆圈中
-      if (distanceFromCenter <= 8) {
+      // console.log(circle.x, circle.y);
+      //判断点击的点是否在左半部分
+      left = (circle.x - clickX <= imgWidth / 2) && (circle.x - clickX >= 0) && (Math.abs(circle.y - clickY) <=
+        imgWidth / 2);
+      //判断点击的点是否在右半部分
+      right = (clickX - circle.x < imgWidth / 2) && (clickX - circle.x >= 0) && (Math.abs(circle.y - clickY) <=
+        imgWidth / 2);
+      console.log(left, right);
+      //如果点击左半部分则连线,如果点击右半部分则拖拽
+      if (left) {
         startx = circle.x;
         starty = circle.y;
         groupstate = true;
         console.log(circle, groupstate);
         return;
+      } else if (right) {
+        groupstate = true;
+        circleIndex = i;
+        // 查找点上的线
+        for (let i = 0; i < arr.length; i++) {
+          var start = (arr[i].startx == circle.x) && (arr[i].starty == circle.y);
+          var end = (arr[i].endx == circle.x) && (arr[i].endy == circle.y);
+          console.log(start, end);
+          if (start) {
+            dragarr.push(arr[i]);
+            console.log(dragarr);
+            arr[i] = {};
+          } else if (end) {
+            dragarr.push({
+              startx: arr[i].endx,
+              starty: arr[i].endy,
+              endx: arr[i].startx,
+              endy: arr[i].starty
+            });
+            console.log(dragarr);
+            arr[i] = {};      
+          }
+        }
+        return;
       }
     }
   }
 
-  // 鼠标点击后的移动事件函数
+  // 连线:鼠标点击后的移动事件函数
   function mouseMoveListener(e) {
+    e.preventDefault();
     if (groupstate) {
       endx = e.pageX - canvas.offsetLeft;
       endy = e.pageY - canvas.offsetTop;
-      timer = setInterval(drawLine(startx, starty, endx, endy), 1000 / 300);
+      if (left) {
+        timer = setInterval(drawLine(startx, starty, endx, endy), 1000 / 300);
+      } else if (right) {
+        circles[circleIndex].x = endx;
+        circles[circleIndex].y = endy;
+        for (var i = 0; i < dragarr.length; i++) {
+          dragarr[i].startx = endx;
+          dragarr[i].starty = endy;
+          // arr.push(dragarr[i])
+          // console.log(dragarr[i]);
+        };
+        var myImage = new Image();
+        myImage.src = './circle.svg';
+        ctx.drawImage(myImage, endx - imgWidth / 2, endy - imgWidth / 2);
+        timer1 = setInterval(drawScreen(endx, endy), 1000 / 300);
+      }
     }
   }
 
-  // 画直线
+  // 点左部分画直线
   function drawLine(sx, sy, ex, ey) {
-    ctx.clearRect(0, 0, 300, 300);
+    ctx.clearRect(0, 0, width, height);
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(sx, sy);
     ctx.lineTo(ex, ey);
     ctx.closePath();
     ctx.stroke();
-    // ctx.restore();
+    ctx.restore();
     drawCircle();
-    redrawLine()
+    redrawLine(arr);
+    redrawLine(dragarr);
+  }
+
+  //点右部分画所有直线和圆
+  function drawScreen(x, y) {
+    ctx.clearRect(0, 0, width, height);
+    ctx.save();
+    var myImage = new Image();
+    myImage.src = './circle.svg';
+    ctx.drawImage(myImage, x - imgWidth / 2, y - imgWidth / 2);
+    drawCircle();
+    redrawLine(arr);
+    redrawLine(dragarr);
   }
 
   // 鼠标移出画布事件函数
   function stopDragging(e) {
+    e.preventDefault();
     groupstate = false;
     clearInterval(timer);
-    ctx.clearRect(0, 0, 300, 300);
+    ctx.clearRect(0, 0, width, height);
     ctx.save();
     drawCircle();
-    redrawLine();
+    redrawLine(arr);
+    redrawLine(dragarr);
   }
 
-  // 鼠标抬起事件函数
+  // 连线:鼠标抬起事件函数
   function mouseUpListener(e) {
-    clearInterval(timer);
+    e.preventDefault();
     groupstate = false;
-    for (var i = circles.length - 1; i >= 0; i--) {
-      var circle = circles[i];
-      //使用勾股定理计算这个点与圆心之间的距离
-      var distanceFromCenter = Math.sqrt(Math.pow(circle.x - endx, 2) +
-        Math.pow(circle.y - endy, 2))
-      // 判断这个点是否在圆圈中
-      if (distanceFromCenter <= 8) {
-        endx = circle.x;
-        endy = circle.y;
-        arr.push({
-          startx,
-          starty,
-          endx,
-          endy
-        });
-        drawLine(startx, starty, endx, endy);
-        ctx.clearRect(0, 0, 300, 300);
-        ctx.save();
-        drawCircle();
-        redrawLine();
-        return;
-      } else {
-        ctx.clearRect(0, 0, 300, 300);
-        ctx.save();
-        drawCircle();
-        redrawLine();
+    endx = e.pageX - canvas.offsetLeft;
+    endy = e.pageY - canvas.offsetTop;
+    //连线
+    if (left) {
+      clearInterval(timer);
+      for (var i = circles.length - 1; i >= 0; i--) {
+        var circle = circles[i];
+        //使用勾股定理计算这个点与圆心之间的距离
+        var distanceFromCenter = Math.sqrt(Math.pow(circle.x - endx, 2) +
+          Math.pow(circle.y - endy, 2))
+        // 判断这个点是否在圆圈中
+        if (distanceFromCenter <= imgHeight / 2) {
+          endx = circle.x;
+          endy = circle.y;
+          arr.push({
+            startx,
+            starty,
+            endx,
+            endy
+          });
+          // drawLine(startx, starty, endx, endy);
+          ctx.clearRect(0, 0, width, height);
+          ctx.save();
+          drawCircle();
+          redrawLine(arr);
+          redrawLine(dragarr);
+          return;
+        } else {
+          ctx.clearRect(0, 0, width, height);
+          ctx.save();
+          drawCircle();
+          redrawLine(arr);
+          redrawLine(dragarr);
+        }
       }
+    } else if (right) {
+      clearInterval(timer1);
+      circles[circleIndex].x = endx;
+      circles[circleIndex].y = endy;
+      for (var i = 0; i < dragarr.length; i++) {
+        dragarr[i].startx = endx;
+        dragarr[i].starty = endy;
+        arr.push(dragarr[i])
+      };
+
+      // drawScreen(endx,endy);
     }
   }
 
@@ -170,12 +271,12 @@
     for (var i = circles.length - 1; i >= 0; i--) {
       var myImage = new Image();
       myImage.src = './circle.svg';
-      ctx.drawImage(myImage, circles[i].x - 8, circles[i].y - 8);
+      ctx.drawImage(myImage, circles[i].x - imgWidth / 2, circles[i].y - imgHeight / 2);
     }
   }
 
   // 循环画出画布上的每根连线
-  function redrawLine() {
+  function redrawLine(arr) {
     for (var i = 0; i < arr.length; i++) {
       ctx.beginPath();
       ctx.moveTo(arr[i].startx, arr[i].starty);
